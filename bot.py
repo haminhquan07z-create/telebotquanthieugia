@@ -1,4 +1,5 @@
-import os, re, io, time, sqlite3, random, asyncio
+import os, re, io, time, sqlite3, random, asyncio, threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, timedelta, time as dtime
 import requests, yt_dlp, qrcode
 import google.generativeai as genai
@@ -247,6 +248,16 @@ async def setnotify(update, ctx):
     if ex: DB.execute("DELETE FROM notify WHERE chat_id=?", (cid,)); DB.commit(); await update.message.reply_text("🔕 Đã tắt thông báo.")
     else: DB.execute("INSERT INTO notify VALUES (?)", (cid,)); DB.commit(); await update.message.reply_text("🔔 Đã bật thông báo 9h sáng.")
 
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+def run_health_check():
+    server = HTTPServer(('0.0.0.0', 7860), HealthCheckHandler)
+    server.serve_forever()
+
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     cmds = {"start": start, "help": help_cmd, "reset": reset, "ping": ping, "id": get_id, "time": time_cmd, "ai": ai_cmd, "mp3": mp3_cmd, "mp4": mp4_cmd, "roll": roll, "coin": coin, "guess": guess, "g": guess_num, "price": price, "weather": weather, "qr": qr, "tr": translate_cmd, "antilink": antilink, "antiflood": antiflood, "warn": warn, "mute": mute, "unmute": unmute, "kick": kick, "ban": ban, "setnotify": setnotify}
@@ -257,6 +268,9 @@ def main():
         else: await moderate(update, ctx)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, dispatch))
     if app.job_queue: app.job_queue.run_daily(daily_job, time=dtime(hour=2, minute=0))
+    
+    threading.Thread(target=run_health_check, daemon=True).start()
+    
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__": main()
